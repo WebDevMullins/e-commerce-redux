@@ -4,7 +4,6 @@ import { Outlet } from 'react-router-dom'
 
 import { Provider } from 'react-redux'
 import store from './redux/store'
-import { StoreProvider } from './utils/GlobalState'
 
 import Nav from './components/Nav'
 
@@ -31,10 +30,8 @@ function App() {
 	return (
 		<ApolloProvider client={client}>
 			<Provider store={store}>
-				<StoreProvider>
-					<Nav />
-					<Outlet />
-				</StoreProvider>
+				<Nav />
+				<Outlet />
 			</Provider>
 		</ApolloProvider>
 	)
