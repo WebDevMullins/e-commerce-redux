@@ -1,107 +1,117 @@
-import { useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
-import { useLazyQuery } from '@apollo/client';
-import { QUERY_CHECKOUT } from '../../utils/queries';
-import { idbPromise } from '../../utils/helpers';
-import CartItem from '../CartItem';
-import Auth from '../../utils/auth';
-import { useStoreContext } from '../../utils/GlobalState';
-import { TOGGLE_CART, ADD_MULTIPLE_TO_CART } from '../../utils/actions';
-import './style.css';
+import { useLazyQuery } from '@apollo/client'
+import { loadStripe } from '@stripe/stripe-js'
+import { useEffect } from 'react'
 
-const stripePromise = loadStripe('pk_test_TYooMQauvdEDq54NiTphI7jx');
+import Auth from '../../utils/auth'
+import { idbPromise } from '../../utils/helpers'
+import { QUERY_CHECKOUT } from '../../utils/queries'
+import CartItem from '../CartItem'
+import './style.css'
+
+import { useDispatch, useSelector } from 'react-redux'
+import { addMultipleToCart, toggleCart } from '../../redux/cartSlice'
+
+const stripePromise = loadStripe('pk_test_TYooMQauvdEDq54NiTphI7jx')
 
 const Cart = () => {
-  const [state, dispatch] = useStoreContext();
-  const [getCheckout, { data }] = useLazyQuery(QUERY_CHECKOUT);
+	// Initialize useDispatch and useSelector hooks from React Redux
+	const dispatch = useDispatch()
+	const { cart, open } = useSelector((state) => state.cart)
 
-  useEffect(() => {
-    if (data) {
-      stripePromise.then((res) => {
-        res.redirectToCheckout({ sessionId: data.checkout.session });
-      });
-    }
-  }, [data]);
+	// Use Apollo useLazyQuery hook to fetch checkout data
+	const [getCheckout, { data }] = useLazyQuery(QUERY_CHECKOUT)
 
-  useEffect(() => {
-    async function getCart() {
-      const cart = await idbPromise('cart', 'get');
-      dispatch({ type: ADD_MULTIPLE_TO_CART, products: [...cart] });
-    }
+	// useEffect hook to handle redirects after successful checkout
+	useEffect(() => {
+		if (data) {
+			// Redirect to Stripe checkout using the obtained session ID
+			stripePromise.then((res) => {
+				res.redirectToCheckout({ sessionId: data.checkout.session })
+			})
+		}
+	}, [data])
 
-    if (!state.cart.length) {
-      getCart();
-    }
-  }, [state.cart.length, dispatch]);
+	// useEffect hook to get cart data from IndexedDB and update Redux store
+	useEffect(() => {
+		async function getCart() {
+			const cart = await idbPromise('cart', 'get')
+			dispatch(addMultipleToCart([...cart]))
+		}
 
-  function toggleCart() {
-    dispatch({ type: TOGGLE_CART });
-  }
+		// Check if cart is empty and fetch data if needed
+		if (!cart.length) {
+			getCart()
+		}
+	}, [cart.length, dispatch])
 
-  function calculateTotal() {
-    let sum = 0;
-    state.cart.forEach((item) => {
-      sum += item.price * item.purchaseQuantity;
-    });
-    return sum.toFixed(2);
-  }
+	// Function to toggle cart visibility
+	function toggleCartClick() {
+		dispatch(toggleCart())
+	}
 
-  function submitCheckout() {
-    const productIds = [];
+	// Function to calculate the total price of items in the cart
+	function calculateTotal() {
+		let sum = 0
+		cart.forEach((item) => {
+			sum += item.price * item.purchaseQuantity
+		})
+		return sum.toFixed(2)
+	}
 
-    state.cart.forEach((item) => {
-      for (let i = 0; i < item.purchaseQuantity; i++) {
-        productIds.push(item._id);
-      }
-    });
+	// Function to submit checkout request with product IDs
+	function submitCheckout() {
+		const productIds = []
 
-    getCheckout({
-      variables: { products: productIds },
-    });
-  }
+		cart.forEach((item) => {
+			for (let i = 0; i < item.purchaseQuantity; i++) {
+				productIds.push(item._id)
+			}
+		})
 
-  if (!state.cartOpen) {
-    return (
-      <div className="cart-closed" onClick={toggleCart}>
-        <span role="img" aria-label="trash">
-          🛒
-        </span>
-      </div>
-    );
-  }
+		// Trigger the getCheckout function with product IDs
+		getCheckout({
+			variables: { products: productIds }
+		})
+	}
 
-  return (
-    <div className="cart">
-      <div className="close" onClick={toggleCart}>
-        [close]
-      </div>
-      <h2>Shopping Cart</h2>
-      {state.cart.length ? (
-        <div>
-          {state.cart.map((item) => (
-            <CartItem key={item._id} item={item} />
-          ))}
+	if (!open) {
+		return (
+			<div className='cart-closed' onClick={toggleCartClick}>
+				<span role='img' aria-label='trash'>
+					🛒
+				</span>
+			</div>
+		)
+	}
 
-          <div className="flex-row space-between">
-            <strong>Total: ${calculateTotal()}</strong>
+	return (
+		<div className='cart'>
+			<div className='close' onClick={toggleCartClick}>
+				[close]
+			</div>
+			<h2>Shopping Cart</h2>
+			{cart.length ? (
+				<div>
+					{cart.map((item) => (
+						<CartItem key={item._id} item={item} />
+					))}
 
-            {Auth.loggedIn() ? (
-              <button onClick={submitCheckout}>Checkout</button>
-            ) : (
-              <span>(log in to check out)</span>
-            )}
-          </div>
-        </div>
-      ) : (
-        <h3>
-          <span role="img" aria-label="shocked">
-            😱
-          </span>
-          You haven't added anything to your cart yet!
-        </h3>
-      )}
-    </div>
-  );
-};
+					<div className='flex-row space-between'>
+						<strong>Total: ${calculateTotal()}</strong>
 
-export default Cart;
+						{Auth.loggedIn() ? <button onClick={submitCheckout}>Checkout</button> : <span>(log in to check out)</span>}
+					</div>
+				</div>
+			) : (
+				<h3>
+					<span role='img' aria-label='shocked'>
+						😱
+					</span>
+					You haven&apos;t added anything to your cart yet!
+				</h3>
+			)}
+		</div>
+	)
+}
+
+export default Cart
